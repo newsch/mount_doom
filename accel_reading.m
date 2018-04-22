@@ -5,7 +5,7 @@ pause(0.25)
 
 
 while true
-    accel = accel_sub.LatestMessage.Data;
+    accel = R*accel_sub.LatestMessage.Data;
     x = accel(1);
     y = accel(2);
     z = accel(3);

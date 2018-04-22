@@ -6,10 +6,10 @@ function ascend()
     cleanUp = @() stop(vel_pub);  % stop on exit/error
     cleanupObj = onCleanup(cleanUp);
     
-    R = [0.944615793680593,0,-0.328178308742645;0,1,0;0.328178308742645,0,0.944615793680593];
+    R = [0.952750292681088,0,-0.303754637489044;0,1,0;0.303754637489044,0,0.952750292681088];
     
-    xt = 0.025;  % threshold for x values
-    yt = 0.025;
+    xt = 0.01;  % threshold for x values
+    yt = 0.01;
     rt = pi/4;
     
     tspeed = 0.1;  % turn speed
@@ -43,25 +43,21 @@ function ascend()
         end
         g = -[x y];
         % determine angle to rotate and distance to drive
-        dist = vecnorm(g.*a);
-        rot = atan2(g(2),g(1));
-        % turn
-        if abs(rot) > rt
-            disp("Turning "+rad2deg(rot)+" degrees.")
-            T = abs(rot / (tspeed*2/d));
-            if rot > 0
-                setVel(-tspeed,tspeed)
-            else
-                setVel(tspeed,-tspeed)
-            end
-            pause(T);
-            setVel(0,0)
-        end
-        % drive
-        disp("Driving "+dist+" meters.")
-        T = (dist / mspeed);
-        setVel(mspeed,mspeed)
-        pause(T);
+        
+        T = g.*a;  % velocity vector
+        T_hat = T ./ sqrt(sum(T.^2, 2));  % velocity unit vector
+        N = diff(T_hat) ./ diff(u(1:end - 1));
+        T_hat3 = [T_hat, zeros(size(T_hat(:, 1)))];  % add a third dim to T_hat
+        N3 = [N, zeros(size(N(:, 1)))];  % add a third dim to N
+        Omega = cross(T_hat3(1:end - 1, :), N3);  % rotational velocities
+        V = sqrt(sum(T.^2, 2));  % linear velocities
+
+        Vr = V(1:end-1,:) + d / 2 * sum(Omega, 2);
+        Vl = V(1:end-1,:) - d / 2 * sum(Omega, 2);
+
+        time = vecnorm(g)/V;
+        setVel(Vl,Vr)
+        pause(time);
         setVel(0,0);
 %         pause(0.05)
     end
