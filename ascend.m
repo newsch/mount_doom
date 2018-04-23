@@ -1,4 +1,5 @@
 function ascend()
+% ASCEND  perform gradient ascent IRL
     disp("Connecting to robut.")
     accel_sub = rossubscriber('/accel');
     vel_pub = rospublisher('/raw_vel');
@@ -6,17 +7,17 @@ function ascend()
     cleanUp = @() stop(vel_pub);  % stop on exit/error
     cleanupObj = onCleanup(cleanUp);
     
-    R = [0.952750292681088,0,-0.303754637489044;0,1,0;0.303754637489044,0,0.952750292681088];
+    R = [0.934989503350951,0,-0.354675384857114;0,1,0;0.354675384857114,0,0.934989503350951];
     
     xt = 0.01;  % threshold for x values
-    yt = 0.01;
-    rt = pi/4;
+    yt = 0.01;  % threshold for y values
+    rt = pi/4;  % threshold for rotation values
     
-    tspeed = 0.1;  % turn speed
-    mspeed = 0.1;  % move speed
+    tspeed = 0.2;  % turn speed
+    mspeed = 0.15;  % move speed
     
-    d = 0.24;  % distance between wheels, in m
-    a = 0.2;
+    d = 0.25;  % distance between wheels, in m
+    a = 0.2;   % constant for gradient acceleration
     
     disp("Ready to climb.")
     disp("Press any key to start.")
@@ -26,58 +27,89 @@ function ascend()
 
     flag = false;
     while ~flag
-        % get gradient
-        [x y z] = getAcceleration(R);
-        if abs(x) < xt && abs(y) < yt
-            disp("Leveled out.")
-            disp("Waiting.")
-            disp("x: "+x+"  y: "+y+"  z: "+z)
+        [x,y,z] = getAcceleration(R);
+        disp("x: "+x+"  y: "+y+"  z: "+z)
+        if abs(x) < xt && abs(y) < yt  % check if "level"
+            disp("Currently level.")
+            setVel(0,0)
+            pause;  % wait for input
+            setVel(0.1,0.1)  % move forward
             pause(2)
-            [x y z] = getAcceleration(R);
-            if abs(x) < xt && abs(y) < yt
-                disp("Stopping.")
-                break
-            else
-                disp("Continuing.")
-            end
+% %             setVel(-0.2,0.2)
+% %             pause(1)
+% %             setVel(0.1,0.1)
+% %             pause(1)
+% %             setVel(0,0)
+% %             pause(4)
+%             [x,y,z] = getAcceleration(R);
+%             if abs(x) < xt && abs(y) < yt
+%                 disp("Leveled out.")
+%                 disp("x: "+x+"  y: "+y+"  z: "+z)
+%                 break
+%             end
+            [x,y,z] = getAcceleration(R);  % update readings
         end
-        g = -[x y];
-        % determine angle to rotate and distance to drive
+        w = remap(-y,[0,0.3],[0.05,0.3]);  % force minimum rotation
+%         v = remap(-x,[0,0.3],[0,mspeed]);
+%         w = -y;
+        v = -x*0.5;  % reduce linear velocity
+%         v = 0;
+        if abs(w) > 0.3
+            w = 0.3 * w/abs(w);
+        end
+        if abs(v) > 0.3
+            v = 0.3 * v/abs(v);
+        end
+        % separate turning and driving
+%         v = -x/abs(-x)*0.1;
+%         w = -y*4;
+        % turn
+%         Vr = d/2*w;
+%         Vl = -d/2*w;
+%         setVel(Vl,Vr);
+%         pause(w*10)
+        % drive
+%        Vr = v;
+%        Vl = v;
+%        setVel(Vl,Vr)
+%        pause(v*10)
+        Vr = v + d / 2 * w;
+        Vl = v - d / 2 * w;
         
-        T = g.*a;  % velocity vector
-        T_hat = T ./ sqrt(sum(T.^2, 2));  % velocity unit vector
-        N = diff(T_hat) ./ diff(u(1:end - 1));
-        T_hat3 = [T_hat, zeros(size(T_hat(:, 1)))];  % add a third dim to T_hat
-        N3 = [N, zeros(size(N(:, 1)))];  % add a third dim to N
-        Omega = cross(T_hat3(1:end - 1, :), N3);  % rotational velocities
-        V = sqrt(sum(T.^2, 2));  % linear velocities
-
-        Vr = V(1:end-1,:) + d / 2 * sum(Omega, 2);
-        Vl = V(1:end-1,:) - d / 2 * sum(Omega, 2);
-
-        time = vecnorm(g)/V;
         setVel(Vl,Vr)
-        pause(time);
-        setVel(0,0);
-%         pause(0.05)
+        pause(0.1);
     end
        
     function [x y z] = getAcceleration(R);
-        accel = R * accel_sub.LatestMessage.Data;
+    % GETACCELERATION  get current accelerometer data
+        C = [-0.025; -0.003; -1.038];  % constant for normalizing
+        accel = accel_sub.LatestMessage.Data;
+        % invert accelerometer readings
         x = -accel(1);
         y = -accel(2);
         z = -accel(3);
     end
 
     function stop(pub)
+    % STOP  stop the robot
         message = rosmessage(pub);
         message.Data = [0 0];
         send(pub, message);
     end
 
     function setVel(vl, vr)
+    % SETVEL  set the wheel velocities
         message = rosmessage(vel_pub);
         message.Data = [vl vr];
         send(vel_pub, message);
     end
+end
+
+function z = remap(c,ab,xy)
+% REMAP  map values from one range to another
+    a = ab(1);
+    b = ab(2);
+    x = xy(1);
+    y = xy(2);
+    z = c/abs(c)*((abs(c) - a) / (b-a) * (y - x) + x);
 end
