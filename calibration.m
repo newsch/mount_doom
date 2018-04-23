@@ -1,3 +1,5 @@
+% CALIBRATION  get current pitch and create a rotation matrix to correct it
+
 accel_sub = rossubscriber('/accel');
 pause(0.25)
 
@@ -6,10 +8,6 @@ accel = accel_sub.LatestMessage.Data;
 x = accel(1);
 y = accel(2);
 z = accel(3);
-
-% linsolve
-% desired = [0 0 -1]';
-% R = linsolve(accel',desired');
 
 % rotations
 theta = tan(x/z);
